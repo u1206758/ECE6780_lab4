@@ -103,6 +103,17 @@ void init_leds(void)
 
 }
 
+//Global variables for USART3 received data
+char rec_data;
+uint8_t rec_data_flag;
+
+//USART3 Interrupt Handler
+void USART3_4_IRQHandler(void)
+{
+  rec_data = USART3->RDR;
+  rec_data_flag = 1;
+}
+
 //Transmits one character over UART
 void transmit_char(char c)
 {
@@ -122,6 +133,83 @@ void print_error(void)
   transmit_char('r');
   transmit_char('\n');
   transmit_char('\r');
+}
+
+//Transmits prompt message over UART
+void print_prompt(void)
+{
+  transmit_char('C');
+  transmit_char('M');
+  transmit_char('D');
+  transmit_char('?');
+  transmit_char('\n');
+  transmit_char('\r');
+}
+
+//Turns on input LED
+void led_on(char led)
+{
+  switch (led)
+  {
+    case 'r':
+      GPIOC->ODR |= GPIO_ODR_6;
+      break;
+    case 'g':
+      GPIOC->ODR |= GPIO_ODR_9;
+      break;
+    case 'b':
+      GPIOC->ODR |= GPIO_ODR_7;
+      break;
+    case 'o':
+      GPIOC->ODR |= GPIO_ODR_8;
+      break;
+    default:
+      print_error();
+  }
+}
+
+//Turns off input LED
+void led_off(char led)
+{
+  switch (led)
+  {
+    case 'r':
+      GPIOC->ODR &= ~GPIO_ODR_6;
+      break;
+    case 'g':
+      GPIOC->ODR &= ~GPIO_ODR_9;
+      break;
+    case 'b':
+      GPIOC->ODR &= ~GPIO_ODR_7;
+      break;
+    case 'o':
+      GPIOC->ODR &= ~GPIO_ODR_8;
+      break;
+    default:
+      print_error();
+  }
+}
+
+//Toggles input LED
+void led_toggle(char led)
+{
+  switch (led)
+  {
+    case 'r':
+      GPIOC->ODR ^= GPIO_ODR_6;
+      break;
+    case 'g':
+      GPIOC->ODR ^= GPIO_ODR_9;
+      break;
+    case 'b':
+      GPIOC->ODR ^= GPIO_ODR_7;
+      break;
+    case 'o':
+      GPIOC->ODR ^= GPIO_ODR_8;
+      break;
+    default:
+      print_error();
+  }
 }
 
 int main(void) 
@@ -163,37 +251,44 @@ int main(void)
   //Enable transmitter and receiver
   USART3->CR1 |= USART_CR1_TE;
   USART3->CR1 |= USART_CR1_RE;
+  //Enable receive register not empty interrupt
+  USART3->CR1 |= USART_CR1_RXNEIE;
+  //Enable and set USART interrupt priority in NVIC
+  NVIC_EnableIRQ(USART3_4_IRQn);
+  NVIC_SetPriority(USART3_4_IRQn, 2);
   //Enable USART peripheral
   USART3->CR1 |= USART_CR1_UE;
   
   volatile char led;
   volatile uint8_t action;
+  HAL_Delay(100);
+  print_prompt();
 
   //Main loop
   while (1) 
   { 
-    if (USART3->ISR & USART_ISR_RXNE)
+    if (rec_data_flag == 1)
     {
-      led = USART3->RDR;
-      switch (led)
+      led = rec_data;
+      rec_data_flag = 0;
+      while (rec_data_flag == 0) {HAL_Delay(1);}
+      action = rec_data;
+      rec_data_flag = 0;
+      switch (action)
       {
-        case 'r':
-          GPIOC->ODR ^= GPIO_ODR_6;
+        case '0':
+          led_off(led);
           break;
-        case 'g':
-          GPIOC->ODR ^= GPIO_ODR_9;
+        case '1':
+          led_on(led);
           break;
-        case 'b':
-          GPIOC->ODR ^= GPIO_ODR_7;
-          break;
-        case 'o':
-          GPIOC->ODR ^= GPIO_ODR_8;
-          break;
-        case 0:
+        case '2':
+          led_toggle(led);
           break;
         default:
           print_error();
       }
+      print_prompt();
     }
   }
 } 
