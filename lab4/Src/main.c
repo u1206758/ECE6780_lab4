@@ -67,32 +67,21 @@ void SystemClock_Config(void);
 
 /* USER CODE END 0 */
 
-//Timer 2 interrupt handler
-void TIM2_IRQHandler(void)
-{
-  //Toggle green and orange LEDs
-  GPIOC->ODR ^= GPIO_ODR_8;
-  GPIOC->ODR ^= GPIO_ODR_9;
-  //Clear update interrupt pending flag
-  TIM2->SR &= ~TIM_SR_UIF;
-}
 
 //Initialize all four LEDs
 void init_leds(void)
 {
   //Initialize red LED, PC6
-  GPIOC->MODER |= GPIO_MODER_MODER6_1; //Alternate function
+  GPIOC->MODER |= GPIO_MODER_MODER6_0; //General purpose output
   GPIOC->OTYPER &= ~GPIO_OTYPER_OT_6; // Push-pull
   GPIOC->OSPEEDR &= ~GPIO_OSPEEDR_OSPEEDR6_0; //Low speed
   GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPDR6_0 | GPIO_PUPDR_PUPDR6_1); //No pull up or down
-  GPIOC->AFR[0] &= 0xF0FFFFFF;
 
   //Initialize blue LED, PC7
-  GPIOC->MODER |= GPIO_MODER_MODER7_1; //Alternate function
+  GPIOC->MODER |= GPIO_MODER_MODER7_0; //General purpose output
   GPIOC->OTYPER &= ~GPIO_OTYPER_OT_7; // Push-pull
   GPIOC->OSPEEDR &= ~GPIO_OSPEEDR_OSPEEDR7_0; //Low speed
   GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPDR7_0 | GPIO_PUPDR_PUPDR7_1); //No pull up or down
-  GPIOC->AFR[0] &= 0x0FFFFFFF;
 
   //Initialize orange LED, PC8
   GPIOC->MODER |= GPIO_MODER_MODER8_0; //General purpose output
@@ -106,6 +95,33 @@ void init_leds(void)
   GPIOC->OSPEEDR &= ~GPIO_OSPEEDR_OSPEEDR9_0; //Low speed
   GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPDR9_0 | GPIO_PUPDR_PUPDR9_1); //No pull up or down
 
+  //Set all LEDs off
+  GPIOC->BSRR |= GPIO_BSRR_BR_6;
+  GPIOC->BSRR |= GPIO_BSRR_BR_7;
+  GPIOC->BSRR |= GPIO_BSRR_BR_8;
+  GPIOC->BSRR |= GPIO_BSRR_BR_9;
+
+}
+
+//Transmits one character over UART
+void transmit_char(char c)
+{
+  //Wait until USART transmit register is empty
+  while (!(USART3->ISR & USART_ISR_TC)) {}
+  //Write character to transmit register
+  USART3->TDR = c;
+}
+
+//Transmits error message over UART
+void print_error(void)
+{
+  transmit_char('e');
+  transmit_char('r');
+  transmit_char('r');
+  transmit_char('o');
+  transmit_char('r');
+  transmit_char('\n');
+  transmit_char('\r');
 }
 
 int main(void) 
@@ -115,94 +131,72 @@ int main(void)
 
   //Enable clock to GPIOC for LEDS
   RCC->AHBENR |= RCC_AHBENR_GPIOCEN; 
-  //Enable clock to GPIOA for button
-  RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-  
+  RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
   //Initialize all LEDs
   init_leds(); 
 
-  //Set green LED on and orange LED off
-  GPIOC->BSRR |= GPIO_BSRR_BS_9;
-  GPIOC->BSRR |= GPIO_BSRR_BR_8;
+  //Set pin PB10 for USART TX
+  GPIOB->MODER |= GPIO_MODER_MODER10_1; //Alternate function
+  GPIOB->OTYPER &= ~GPIO_OTYPER_OT_10; // Push-pull
+  GPIOB->OSPEEDR &= ~GPIO_OSPEEDR_OSPEEDR10_0; //Low speed
+  GPIOB->PUPDR |= GPIO_PUPDR_PUPDR10_0; //Pull up
+  //Set pin PB11 for USART RX
+  GPIOB->MODER |= GPIO_MODER_MODER11_1; //Alternate function
+  GPIOB->OTYPER &= ~GPIO_OTYPER_OT_11; // Push-pull
+  GPIOB->OSPEEDR &= ~GPIO_OSPEEDR_OSPEEDR11_0; //Low speed
+  GPIOB->PUPDR |= GPIO_PUPDR_PUPDR11_0; //Pull up
+  GPIOB->AFR[1] &= 0xFFFF44FF;
+  GPIOB->AFR[1] |= 0x00004400;
 
-  //Enable clock to timer 2
-  RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
-  //Set timer 2 frequency to 1 KHz by dividing by 7,999
-  TIM2->PSC = 7999U;
-  //Set ARR to count to 250
-  TIM2->ARR = 250U;
-  //Set edge-aligned mode
-  TIM2->CR1 &= ~TIM_CR1_CMS;
-  //Set upcounting mode
-  TIM2->CR1 &= ~TIM_CR1_DIR;
-  //Enable update event generation
-  TIM2->CR1 &= ~TIM_CR1_UDIS;
-  //Enable update interrupt
-  TIM2->DIER |= TIM_DIER_UIE;
-  //Enable timer 2
-  TIM2->CR1 |= TIM_CR1_CEN;
-
-  //Enable timer 2 interrupt handler in NVIC
-  NVIC_EnableIRQ(TIM2_IRQn);
-  //Set priority to 1
-  NVIC_SetPriority(TIM2_IRQn,1);
-
-  //Enable clock to timer 3
-  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-  //Set timer 3 frequency to 800 KHz by dividing by 10
-  TIM3->PSC = 9U;
-  //Set ARR to count to 1000
-  TIM3->ARR = 1000U;
-  //Set edge-aligned mode
-  TIM3->CR1 &= ~TIM_CR1_CMS;
-  //Set upcounting mode
-  TIM3->CR1 &= ~TIM_CR1_DIR;
-  //Enable update event generation
-  TIM3->CR1 &= ~TIM_CR1_UDIS;
-  //Configure channels 1 & 2 as outputs
-  TIM3->CCMR1 &= ~TIM_CCMR1_CC1S;
-  TIM3->CCMR1 &= ~TIM_CCMR1_CC2S;
-  //Set output channel 1 to PWM mode 2
-  TIM3->CCMR1 |= TIM_CCMR1_OC1M;
-  //Set output channel 2 to PWM mode 1
-  TIM3->CCMR1 &= ~TIM_CCMR1_OC2M_0;
-  TIM3->CCMR1 |= TIM_CCMR1_OC2M_1;
-  TIM3->CCMR1 |= TIM_CCMR1_OC2M_2;
-  //Enable output compare preload for both channels
-  TIM3->CCMR1 |= TIM_CCMR1_OC1PE;
-  TIM3->CCMR1 |= TIM_CCMR1_OC2PE;
-  //Set output enable for both channels
-  TIM3->CCER |= TIM_CCER_CC1E;
-  TIM3->CCER |= TIM_CCER_CC2E;
-  //Enable timer 3
-  TIM3->CR1 |= TIM_CR1_CEN;
-
-  //To best demonstrate the change in the CCRx values on the LED brightness
-  //  and the differences between PWM modes 1 & 2 I am configuring timer 1 
-  //  in up-down count mode and the main loop will set the CCRx values of
-  //  timer 3 to the count of timer 1, approximating a sine wave like in
-  //  figure 3.5 in the lab handout
+  //Enable clock to USART3
+  RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+  //Set word length to 8 bits
+  USART3->CR1 &= ~USART_CR1_M1;
+  USART3->CR1 &= ~USART_CR1_M0;
+  //Set baud rate to 115200 bits/sec
+  USART3->BRR = 0x45;
+  //Set stop bits to 1
+  USART3->CR2 &= ~USART_CR2_STOP_0;
+  USART3->CR2 &= ~USART_CR2_STOP_1;
+  //Set no parity
+  USART3->CR1 &= ~USART_CR1_PCE;
+  //Enable transmitter and receiver
+  USART3->CR1 |= USART_CR1_TE;
+  USART3->CR1 |= USART_CR1_RE;
+  //Enable USART peripheral
+  USART3->CR1 |= USART_CR1_UE;
   
-  //Enable clock to timer 1
-  RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-  //Set timer 1 frequency to 1 KHz by dividing by 8000
-  TIM1->PSC = 7999U;
-  //Set ARR to count to 1000
-  TIM1->ARR = 1000U;
-  //Set center aligned mode 3
-  TIM1->CR1 |= TIM_CR1_CMS;
-  //Set upcounting mode
-  TIM2->CR1 &= ~TIM_CR1_DIR;
-  //Enable timer 1
-  TIM1->CR1 |= TIM_CR1_CEN;
-  
+  volatile char led;
+  volatile uint8_t action;
+
   //Main loop
   while (1) 
   { 
-    TIM3->CCR1 = TIM1->CNT;
-    TIM3->CCR2 = TIM1->CNT;
+    if (USART3->ISR & USART_ISR_RXNE)
+    {
+      led = USART3->RDR;
+      switch (led)
+      {
+        case 'r':
+          GPIOC->ODR ^= GPIO_ODR_6;
+          break;
+        case 'g':
+          GPIOC->ODR ^= GPIO_ODR_9;
+          break;
+        case 'b':
+          GPIOC->ODR ^= GPIO_ODR_7;
+          break;
+        case 'o':
+          GPIOC->ODR ^= GPIO_ODR_8;
+          break;
+        case 0:
+          break;
+        default:
+          print_error();
+      }
+    }
   }
-}
+} 
 
 /** System Clock Configuration
 */
