@@ -146,6 +146,69 @@ void print_prompt(void)
   transmit_char('\r');
 }
 
+//Transmits input command back over UART
+void print_command(char led, char action)
+{
+  switch (led)
+  {
+    case 'r':
+      transmit_char('r');
+      transmit_char('e');
+      transmit_char('d');
+      break;
+    case 'g':
+      transmit_char('g');
+      transmit_char('r');
+      transmit_char('e');
+      transmit_char('e');
+      transmit_char('n');
+      break;
+    case 'b':
+      transmit_char('b');
+      transmit_char('l');
+      transmit_char('u');
+      transmit_char('e');
+      break;
+    case 'o':
+      transmit_char('o');
+      transmit_char('r');
+      transmit_char('a');
+      transmit_char('n');
+      transmit_char('g');
+      transmit_char('e');
+      break;
+    default:
+      print_error();
+  }
+
+  transmit_char(' ');
+
+  switch (action)
+  {
+    case '0':
+      transmit_char('o');
+      transmit_char('f');
+      transmit_char('f');      
+      break;
+    case '1':
+      transmit_char('o');
+      transmit_char('n');
+      break;
+    case '2':
+      transmit_char('t');
+      transmit_char('o');
+      transmit_char('g');
+      transmit_char('g');
+      transmit_char('l');
+      transmit_char('e');
+      break;
+    default:
+      print_error();
+  }
+  transmit_char('\n');
+  transmit_char('\r');
+}
+
 //Turns on input LED
 void led_on(char led)
 {
@@ -260,7 +323,7 @@ int main(void)
   USART3->CR1 |= USART_CR1_UE;
   
   volatile char led;
-  volatile uint8_t action;
+  volatile char action;
   HAL_Delay(100);
   print_prompt();
 
@@ -271,24 +334,35 @@ int main(void)
     {
       led = rec_data;
       rec_data_flag = 0;
-      while (rec_data_flag == 0) {HAL_Delay(1);}
-      action = rec_data;
-      rec_data_flag = 0;
-      switch (action)
+      if (led != 'r' && led != 'g' && led != 'b' && led != 'o')
       {
-        case '0':
-          led_off(led);
-          break;
-        case '1':
-          led_on(led);
-          break;
-        case '2':
-          led_toggle(led);
-          break;
-        default:
-          print_error();
+        print_error();
+        print_prompt();
       }
-      print_prompt();
+      else
+      {
+        while (rec_data_flag == 0) {HAL_Delay(1);}
+        action = rec_data;
+        rec_data_flag = 0;
+        switch (action)
+        {
+          case '0':
+            led_off(led);
+            print_command(led,action);
+            break;
+          case '1':
+            led_on(led);
+            print_command(led,action);
+            break;
+          case '2':
+            led_toggle(led);
+            print_command(led,action);
+            break;
+          default:
+            print_error();
+        }
+        print_prompt();
+      }
     }
   }
 } 
